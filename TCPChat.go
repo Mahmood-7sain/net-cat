@@ -69,11 +69,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func (s *Server) sendMessagesToClient(conn net.Conn) {
-	for _, msg := range s.messageBuffer {
-		s.sendMessage(conn, fmt.Sprintf("[%s][%s]:%s\n", msg.time, msg.from, msg.payload))
-	}
-}
+
 
 func (s *Server) acceptLoop() {
 	for {
@@ -111,24 +107,6 @@ func (s *Server) acceptLoop() {
 	}
 }
 
-func (s *Server) DisconnectClient(conn net.Conn, clientName string) {
-	// Lock the mutex to safely update the connection count
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	// Close the client's connection
-	conn.Close()
-
-	// Remove the client from the map
-	delete(s.clients, conn)
-
-	// Update the connection count
-	s.connectionCount--
-
-	// Broadcast a message to inform others about the disconnection
-	s.broadcastJoinDisc(clientName, clientName+" has left our chat...")
-}
-
 func (s *Server) handleClient(conn net.Conn) {
 	defer func() {
 		// Decrement the connection count when the client disconnects
@@ -157,13 +135,6 @@ func (s *Server) handleClient(conn net.Conn) {
 			break
 		}
 	}
-	// s.sendMessage(conn, "[ENTER YOUR NAME]:")
-	// name, err := s.receiveMessage(conn)
-
-	// if err != nil {
-	// 	fmt.Println("Error receiving name:", err)
-	// 	return
-	// }
 
 	clientName := strings.TrimSpace(name)
 
@@ -186,10 +157,6 @@ func (s *Server) handleClient(conn net.Conn) {
 			break
 		}
 
-		// s.msgch <- Message{
-		// 	from:    clientName,
-		// 	payload: message,
-		// }
 		if message != "" {
 			s.messageBuffer = append(s.messageBuffer, Message{clientName, message, time.Now().Format("2006-01-02 15:04:05")})
 			s.broadcastMessage(clientName, message)
@@ -201,9 +168,16 @@ func (s *Server) sendMessage(conn net.Conn, message string) {
 	conn.Write([]byte(message))
 }
 
+
 func (s *Server) receiveMessage(conn net.Conn) (string, error) {
 	message, err := bufio.NewReader(conn).ReadString('\n')
 	return strings.TrimSpace(message), err
+}
+
+func (s *Server) sendMessagesToClient(conn net.Conn) {
+	for _, msg := range s.messageBuffer {
+		s.sendMessage(conn, fmt.Sprintf("[%s][%s]:%s\n", msg.time, msg.from, msg.payload))
+	}
 }
 
 // Broadcast the message to all other clients
@@ -258,6 +232,8 @@ func main() {
 		os.Exit(0)
 	}
 }
+
+
 
 func IsInt(value string) bool {
 	if value == "" {
