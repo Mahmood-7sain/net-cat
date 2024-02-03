@@ -36,23 +36,22 @@ func NewServer(listenAddr string) *Server {
 	}
 }
 
-// var logo = "         _nnnn_
-// dGGGGMMb
-// @p~qp~~qMb
-// M|@||@) M|
-// @,----.JM|
-// JS^\__/  qKL
-// dZP        qKRb
-// dZP          qKKb
-// fZP            SMMb
-// HZM            MMMM
-// FqM            MMMM
-// __| ".        |\dS/"qML
-// |    `.       | `' \Zq
-// _)      \.___.,|     .'
-// \____   )MMMMMP|   .'
-// `-'       `--'
-// "
+var logo = `           _nnnn_
+          dGGGGMMb
+         @p~qp~~qMb
+         M|@||@) M|
+         @,----.JM|
+        JS^\__/  qKL
+       dZP        qKRb
+      dZP          qKKb
+     fZP            SMMb
+     HZM            MMMM
+     FqM            MMMM
+   __| ".        |\dS"qML
+   |    '.       | '' \Zq
+  _)      \.___.,|     .'
+  \____   )MMMMMP|   .'
+       '-'       '--'`
 
 
 func (s *Server) Start() error {
@@ -62,7 +61,6 @@ func (s *Server) Start() error {
 	}
 	defer ln.Close()
 	s.ln = ln
-
 	go s.acceptLoop()
 
 	<-s.quitch
@@ -143,14 +141,29 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	// Prompt the client for their name
 	s.sendMessage(conn, "Welcome to TCP-Chat!\n")
-	//Linux logo
-	s.sendMessage(conn, "[ENTER YOUR NAME]:")
-	name, err := s.receiveMessage(conn)
+	s.sendMessage(conn, logo+"\n")
 
-	if err != nil {
-		fmt.Println("Error receiving name:", err)
-		return
+	var name string
+	var err error
+
+	for{
+		s.sendMessage(conn, "[ENTER YOUR NAME]:")
+		name, err = s.receiveMessage(conn)
+		if err != nil {
+			fmt.Println("Error receiving name:", err)
+			return
+		}
+		if strings.TrimSpace(name) != ""{
+			break
+		}
 	}
+	// s.sendMessage(conn, "[ENTER YOUR NAME]:")
+	// name, err := s.receiveMessage(conn)
+
+	// if err != nil {
+	// 	fmt.Println("Error receiving name:", err)
+	// 	return
+	// }
 
 	clientName := strings.TrimSpace(name)
 
@@ -164,7 +177,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	s.sendMessagesToClient(conn)
 
 	for {
-		s.sendMessage(conn, fmt.Sprintf("[%s][%s]: \n", time.Now().Format("2006-01-02 15:04:05"), clientName))
+		s.sendMessage(conn, fmt.Sprintf("[%s][%s]:", time.Now().Format("2006-01-02 15:04:05"), clientName))
 		// Read the message from the client
 		message, err := s.receiveMessage(conn)
 		if err != nil {
@@ -198,11 +211,12 @@ func (s *Server) broadcastMessage(from, message string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	formattedMessage := fmt.Sprintf("[%s][%s]:%s", time.Now().Format("2006-01-02 15:04:05"), from, message)
+	formattedMessage := fmt.Sprintf("\n[%s][%s]:%s", time.Now().Format("2006-01-02 15:04:05"), from, message)
 
 	for otherConn, otherName := range s.clients {
 		if otherName != from {
 			s.sendMessage(otherConn, formattedMessage)
+			s.sendMessage(otherConn, fmt.Sprintf("\n[%s][%s]:", time.Now().Format("2006-01-02 15:04:05"), otherName))
 		}
 	}
 }
@@ -213,7 +227,8 @@ func (s *Server) broadcastJoinDisc(from, message string) {
 
 	for otherConn, otherName := range s.clients {
 		if otherName != from {
-			s.sendMessage(otherConn, message+"\n")
+			s.sendMessage(otherConn, "\n"+message)
+			s.sendMessage(otherConn, fmt.Sprintf("\n[%s][%s]:", time.Now().Format("2006-01-02 15:04:05"), otherName))
 		}
 	}
 }
