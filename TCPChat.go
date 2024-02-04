@@ -10,32 +10,6 @@ import (
 	"time"
 )
 
-type Server struct {
-	listenAddr      string
-	ln              net.Listener
-	quitch          chan struct{}
-	msgch           chan Message
-	clients         map[net.Conn]string // Added a map to store connected clients and their names
-	mutex           sync.Mutex
-	connectionCount int
-	messageBuffer   []Message
-}
-
-type Message struct {
-	from    string
-	payload string
-	time    string
-}
-
-func NewServer(listenAddr string) *Server {
-	return &Server{
-		listenAddr: listenAddr,
-		quitch:     make(chan struct{}),
-		msgch:      make(chan Message, 10),
-		clients:    make(map[net.Conn]string),
-	}
-}
-
 var logo = `           _nnnn_
           dGGGGMMb
          @p~qp~~qMb
@@ -53,7 +27,37 @@ var logo = `           _nnnn_
   \____   )MMMMMP|   .'
        '-'       '--'`
 
+type Server struct {
+	listenAddr      string   //Port to listen on
+	ln              net.Listener  //The actual listener
+	quitch          chan struct{}  //To stop the server
+	msgch           chan Message   //Channel to send messages to the clients
+	clients         map[net.Conn]string // Added a map to store connected clients and their names
+	mutex           sync.Mutex      // Mutex to protect from concurrent access
+	connectionCount int             // Count of connected clients
+	messageBuffer   []Message       // Buffer to store messages received from clients
+}
 
+type Message struct {
+	from    string // The name of the client that sent the message
+	payload string // The message payload
+	time    string // The time the message was sent
+}
+
+//Creates a new TCP server with the given listen address.
+func NewServer(listenAddr string) *Server {
+	return &Server{
+		listenAddr: listenAddr,
+		quitch:     make(chan struct{}),
+		msgch:      make(chan Message, 10),
+		clients:    make(map[net.Conn]string),
+	}
+}
+
+
+
+
+//Starts the TCP server and listens for incoming connections
 func (s *Server) Start() error {
 	ln, err := net.Listen("tcp", s.listenAddr)
 	if err != nil {
@@ -70,7 +74,7 @@ func (s *Server) Start() error {
 }
 
 
-
+//Loops and accepts new connections 
 func (s *Server) acceptLoop() {
 	for {
 		// Lock the mutex to safely check and update the connection count
@@ -107,6 +111,8 @@ func (s *Server) acceptLoop() {
 	}
 }
 
+
+//Handles new client connections and continues to read msgs
 func (s *Server) handleClient(conn net.Conn) {
 	defer func() {
 		// Decrement the connection count when the client disconnects
@@ -119,11 +125,12 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	// Prompt the client for their name
 	s.sendMessage(conn, "Welcome to TCP-Chat!\n")
-	s.sendMessage(conn, logo+"\n")
+	s.sendMessage(conn, logo+"\n") //Prints linux logo
 
 	var name string
 	var err error
 
+	//Loop until the client inputs a name
 	for{
 		s.sendMessage(conn, "[ENTER YOUR NAME]:")
 		name, err = s.receiveMessage(conn)
@@ -145,18 +152,18 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	s.broadcastJoinDisc(clientName, clientName+" has joined our chat...")
 
-	s.sendMessagesToClient(conn)
+	s.sendMessagesToClient(conn) //Send all previous msgs to the new client
 
 	for {
 		s.sendMessage(conn, fmt.Sprintf("[%s][%s]:", time.Now().Format("2006-01-02 15:04:05"), clientName))
 		// Read the message from the client
 		message, err := s.receiveMessage(conn)
 		if err != nil {
-			// fmt.Printf("%s has left the chat\n", clientName)
 			s.broadcastJoinDisc(clientName, clientName+" has left our chat...")
 			break
 		}
 
+		//Only accept non empty msgs
 		if message != "" {
 			s.messageBuffer = append(s.messageBuffer, Message{clientName, message, time.Now().Format("2006-01-02 15:04:05")})
 			s.broadcastMessage(clientName, message)
@@ -164,23 +171,27 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 }
 
+//Writes the msg to the passes connection(client)
 func (s *Server) sendMessage(conn net.Conn, message string) {
 	conn.Write([]byte(message))
 }
 
 
+//Receives a message from the client and returns it as a string.
 func (s *Server) receiveMessage(conn net.Conn) (string, error) {
 	message, err := bufio.NewReader(conn).ReadString('\n')
 	return strings.TrimSpace(message), err
 }
 
+//Sends all previous msgs stored in the buffer to the new client
 func (s *Server) sendMessagesToClient(conn net.Conn) {
 	for _, msg := range s.messageBuffer {
 		s.sendMessage(conn, fmt.Sprintf("[%s][%s]:%s\n", msg.time, msg.from, msg.payload))
 	}
 }
 
-// Broadcast the message to all other clients
+
+// Broadcasts the message to all clients except the sender
 func (s *Server) broadcastMessage(from, message string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -195,6 +206,8 @@ func (s *Server) broadcastMessage(from, message string) {
 	}
 }
 
+
+//Brodcasts to all connected clients when a client joins or leaves the chat
 func (s *Server) broadcastJoinDisc(from, message string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -207,6 +220,8 @@ func (s *Server) broadcastJoinDisc(from, message string) {
 	}
 }
 
+
+//Takes the port number as an argument and starts the server on that port.
 func main() {
 	args := os.Args[1:]
 	if len(args) <= 1 {
@@ -218,7 +233,7 @@ func main() {
 			}
 			port = args[0]
 		}
-		server := NewServer(":" + port)
+		server := NewServer("0.0.0.0:" + port)
 		fmt.Printf("Listening on the port :%s\n", port)
 
 
@@ -234,7 +249,7 @@ func main() {
 }
 
 
-
+//Checks if a passed string only contains valid integers
 func IsInt(value string) bool {
 	if value == "" {
 		return false
@@ -250,7 +265,7 @@ func IsInt(value string) bool {
 }
 
 
-
+//Checks whether the given port is valid or not
 func IsPortValid(port string) bool {
 	if !IsInt(port) {
 		return false
@@ -260,6 +275,7 @@ func IsPortValid(port string) bool {
 	return portNumber >= 1 && portNumber <= 65535
 }
 
+//Returns a passed string as an int
 func atoi(s string) int {
 	n := 0
 	for _, c := range s {
