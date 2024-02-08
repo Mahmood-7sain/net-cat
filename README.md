@@ -13,7 +13,7 @@ Net-Cat is a simple replication of the net-cat utility tool. Where a server list
 
 
 ## Usage: How to run?
-- Clone the repository:
+- Clone the repository: https://github.com/Mahmood-7sain/net-cat.git
 - Navigate to the correct directory: cd net-cat
 - To start the server: go run TCPChat.go [port]
 - To connect as client: nc $IP $port
